@@ -1,0 +1,11 @@
+# Unpinned on purpose: the notebooks were run on Kaggle's default GPU image (Tesla T4).
+torch
+segmentation-models-pytorch
+albumentations
+timm
+opencv-python-headless
+numpy
+pandas
+scikit-learn
+matplotlib
+tqdm

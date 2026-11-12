@@ -1,0 +1,10 @@
+# data and weights are not redistributed
+*.pth
+*.pt
+*.zip
+data/
+Dataset/
+checkpoints/
+predictions/
+.ipynb_checkpoints/
+__pycache__/
