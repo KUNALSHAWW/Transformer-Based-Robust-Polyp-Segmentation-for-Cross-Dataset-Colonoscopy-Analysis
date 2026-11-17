@@ -31,6 +31,15 @@ for it in pool[:20]:
 assert changed >= 12, changed
 print("data + overlay OK (overlay changed", changed, "of 20; never covers >5% of the polyp)")
 
+# 2b) validation Dice must react to the prediction (a double sigmoid once made it constant)
+from train import dice_per_image
+pr = torch.zeros(2, 1, 8, 8); gt = torch.zeros(2, 1, 8, 8); gt[:, 0, :4] = 1; pr[0, 0, :4] = 0.9
+d = dice_per_image(pr, gt)
+assert abs(float(d[0]) - 1) < 1e-4 and float(d[1]) < 1e-4, d                      # perfect image -> 1, empty prediction -> 0
+assert float(dice_per_image(torch.ones(2, 1, 8, 8), gt).mean()) < 0.7              # "everything is polyp" is NOT a good score
+assert float(dice_per_image(torch.full((2, 1, 8, 8), 0.4), gt).mean()) < 1e-4      # probability below threshold -> nothing predicted
+print("validation Dice OK")
+
 # 3) every model variant: shapes, finite loss, gradients reach encoder and new heads
 x = torch.randn(2, 3, 384, 384); y = (torch.rand(2, 1, 384, 384) > .8).float()
 for name, (mk, fl) in VARIANTS.items():

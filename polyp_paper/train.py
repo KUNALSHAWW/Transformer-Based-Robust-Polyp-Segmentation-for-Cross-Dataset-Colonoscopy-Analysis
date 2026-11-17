@@ -31,8 +31,9 @@ class EMA:
             v.mul_(self.d).add_(msd[k].detach(), alpha=1 - self.d) if v.dtype.is_floating_point else v.copy_(msd[k])
 
 
-def dice_per_image(logits, y, thr=.5):
-    p = (torch.sigmoid(logits) > thr).float().flatten(1); t = y.flatten(1)
+def dice_per_image(prob, y, thr=.5):
+    """per-image Dice of thresholded PROBABILITIES (not logits)."""
+    p = (prob > thr).float().flatten(1); t = y.flatten(1)
     return (2 * (p * t).sum(1) + 1e-6) / (p.sum(1) + t.sum(1) + 1e-6)
 
 
@@ -53,7 +54,7 @@ def main():
     ap.add_argument("--variant", default="base", choices=list(VARIANTS)); ap.add_argument("--fold", type=int, default=0)
     ap.add_argument("--seed", type=int, default=0); ap.add_argument("--out", default="runs")
     ap.add_argument("--epochs", type=int, default=60); ap.add_argument("--bs", type=int, default=8); ap.add_argument("--workers", type=int, default=2)
-    ap.add_argument("--patience", type=int, default=12); ap.add_argument("--lr_enc", type=float, default=2e-5); ap.add_argument("--lr_dec", type=float, default=2e-4)
+    ap.add_argument("--patience", type=int, default=12); ap.add_argument("--min_epochs", type=int, default=10, help="early stopping cannot fire before this epoch"); ap.add_argument("--lr_enc", type=float, default=2e-5); ap.add_argument("--lr_dec", type=float, default=2e-4)
     ap.add_argument("--w_size", type=float, default=0.2); ap.add_argument("--w_cons", type=float, default=1.0)
     ap.add_argument("--no_pretrained", action="store_true"); ap.add_argument("--dry", type=int, default=0, help="tiny CPU smoke test: use N images")
     a = ap.parse_args()
@@ -100,7 +101,7 @@ def main():
             torch.save({"state": ema.m.state_dict(), "variant": a.variant, "model_kwargs": mk, "epoch": ep, "val_dice": d}, os.path.join(run, "best.pt"))
         else:
             bad += 1
-            if bad >= a.patience:
+            if bad >= a.patience and ep >= a.min_epochs:
                 break
     ck = torch.load(os.path.join(run, "best.pt"), map_location=dev); ema.m.load_state_dict(ck["state"])
     P, Y, T, TH = predict(ema.m, vl, dev, amp)
