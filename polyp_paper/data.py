@@ -17,10 +17,10 @@ def to_tensor(img_u8):
     return torch.from_numpy(((img_u8.astype(np.float32) / 255.0 - MEAN) / STD).transpose(2, 0, 1).copy())
 
 
-def build_geo(seed=None):
+def build_geo(seed=None, size=SIZE):
     """Same augmentation family as the original recipe (written for albumentations 2.x)."""
     return A.Compose([
-        A.Resize(SIZE, SIZE), A.HorizontalFlip(p=.5), A.VerticalFlip(p=.5),
+        A.Resize(size, size), A.HorizontalFlip(p=.5), A.VerticalFlip(p=.5),
         A.ShiftScaleRotate(shift_limit=.05, scale_limit=.10, rotate_limit=15, border_mode=cv2.BORDER_REFLECT_101, p=.5),
         A.GridDistortion(num_steps=5, distort_limit=.15, border_mode=cv2.BORDER_REFLECT_101, p=.3),
         A.ColorJitter(brightness=.15, contrast=.15, saturation=.15, hue=.05, p=.5),
@@ -62,12 +62,12 @@ def area_to_t(a):
 
 
 class PolypDS(Dataset):
-    def __init__(self, items, train=False, overlay="none", overlay_p=0.5, seed=0):
-        self.items, self.train, self.overlay, self.p, self.seed = items, train, overlay, overlay_p, seed
+    def __init__(self, items, train=False, overlay="none", overlay_p=0.5, seed=0, size=SIZE):
+        self.items, self.train, self.overlay, self.p, self.seed, self.size = items, train, overlay, overlay_p, seed, size
         self.reseed(seed)
 
     def reseed(self, seed):
-        self.geo = build_geo(seed) if self.train else A.Compose([A.Resize(SIZE, SIZE)])
+        self.geo = build_geo(seed, self.size) if self.train else A.Compose([A.Resize(self.size, self.size)])
         self.rng = np.random.default_rng(seed)
 
     def __len__(self):

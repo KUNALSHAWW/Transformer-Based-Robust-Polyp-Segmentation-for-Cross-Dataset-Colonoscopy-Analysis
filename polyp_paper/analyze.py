@@ -11,11 +11,19 @@ import matplotlib.pyplot as plt
 import numpy as np, pandas as pd
 from metrics import bootstrap_ci, paired_compare
 
-VARIANT_ORDER = ["base", "roy_plain", "roy", "roy_size", "roy_overlay", "roy_full"]
-COL = {"base": "#4c72b0", "roy_plain": "#8c8c8c", "roy": "#dd8452", "roy_size": "#55a868", "roy_overlay": "#8172b3", "roy_full": "#c44e52"}
+VARIANT_ORDER = ["base", "roy_plain", "roy", "roy_size", "roy_overlay", "roy_full",
+                 "base_ms", "base_512", "base_b2", "base_b1", "base_b0", "base_b2_kd", "base_b1_kd", "base_b0_kd", "roy_b1", "roy_b1_kd", "roy_b0"]
+COL = {"base": "#4c72b0", "roy_plain": "#8c8c8c", "roy": "#dd8452", "roy_size": "#55a868", "roy_overlay": "#8172b3", "roy_full": "#c44e52",
+       "base_ms": "#937860", "base_512": "#da8bc3", "base_b2": "#64b5cd", "base_b1": "#ccb974", "base_b0": "#8c613c",
+       "base_b2_kd": "#1f77b4", "base_b1_kd": "#bcbd22", "base_b0_kd": "#7f4a1c", "roy_b1": "#e377c2", "roy_b1_kd": "#17becf", "roy_b0": "#aec7e8"}
 NICE = {"base": "base (original model)", "roy_plain": "roy_plain", "roy": "roy (guide-style decoder)", "roy_size": "roy + size idea",
-        "roy_overlay": "roy + sticker idea", "roy_full": "roy + both ideas"}
-PARAMS_M = {"base": 47.35, "roy_plain": 44.34, "roy": 45.46, "roy_size": 45.53, "roy_overlay": 45.46, "roy_full": 45.53}   # measured in selfcheck.py
+        "roy_overlay": "roy + sticker idea", "roy_full": "roy + both ideas",
+        "base_ms": "base + multi-scale training", "base_512": "base at 512 px", "base_b2": "small encoder B2", "base_b1": "small encoder B1", "base_b0": "tiny encoder B0",
+        "base_b2_kd": "B2 taught by base", "base_b1_kd": "B1 taught by base", "base_b0_kd": "B0 taught by base",
+        "roy_b1": "B1 + guide decoder", "roy_b1_kd": "B1 + guide decoder, taught", "roy_b0": "B0 + guide decoder"}
+PARAMS_M = {"base": 47.35, "roy_plain": 44.34, "roy": 45.46, "roy_size": 45.53, "roy_overlay": 45.46, "roy_full": 45.53,   # measured in selfcheck.py
+            "base_ms": 47.35, "base_512": 47.35, "base_b2": 27.48, "base_b1": 16.43, "base_b0": 5.55, "base_b2_kd": 27.48, "base_b1_kd": 16.43, "base_b0_kd": 5.55,
+            "roy_b1": 14.54, "roy_b1_kd": 14.54, "roy_b0": 4.15}
 # published mDice under the standard (PraNet) protocol, copied from each method's own paper (see evidence notes)
 PUBLISHED = {"PraNet (2020)": [.898, .899, .709, .628, .871], "SANet (2021)": [.904, .916, .753, .750, .888], "Polyp-PVT (2023)": [.917, .937, .808, .787, .900],
              "Polyper (2024)": [.9482, .9445, .8372, .8651, .9243], "SAM-MaGuP (2025)": [.947, .953, .859, .854, .927]}

@@ -126,4 +126,18 @@ VARIANTS = {   # name -> (model kwargs, loss/training flags)
     "roy_overlay_aug": (dict(decoder="roy"), dict(overlay="aug")),
     "roy_size_gate_only": (dict(decoder="roy", size_head=True, size_gate=True), dict(size_loss=True)),
     "roy_size_loss_only": (dict(decoder="roy", size_head=True), dict(size_loss=True, size_tversky=True)),
+    # smaller encoders (efficiency study): same recipe, MiT-B0 / B1 / B2 instead of B3
+    "base_b0": (dict(decoder="unet", encoder="mit_b0"), dict()),
+    "base_b1": (dict(decoder="unet", encoder="mit_b1"), dict()),
+    "base_b2": (dict(decoder="unet", encoder="mit_b2"), dict()),
+    "roy_b0": (dict(decoder="roy", encoder="mit_b0"), dict()),
+    "roy_b1": (dict(decoder="roy", encoder="mit_b1"), dict()),
+    # tiny-polyp experiments: multi-scale training (0.75, 1, 1.25 x size) and a higher input size
+    "base_ms": (dict(decoder="unet"), dict(ms=True)),
+    "base_512": (dict(decoder="unet"), dict(size=512)),
+    # distillation: small student learns from the base (MiT-B3) model of the same fold
+    "base_b0_kd": (dict(decoder="unet", encoder="mit_b0"), dict(kd="base")),
+    "base_b1_kd": (dict(decoder="unet", encoder="mit_b1"), dict(kd="base")),
+    "base_b2_kd": (dict(decoder="unet", encoder="mit_b2"), dict(kd="base")),
+    "roy_b1_kd": (dict(decoder="roy", encoder="mit_b1"), dict(kd="base")),
 }

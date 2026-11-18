@@ -15,14 +15,15 @@ def load_models(run_dirs, dev):
     ms = []
     for d in run_dirs:
         ck = torch.load(os.path.join(d, "best.pt"), map_location=dev)
-        m = PolypNet(pretrained=False, **ck["model_kwargs"]); m.load_state_dict(ck["state"]); ms.append(m.to(dev).eval())
+        m = PolypNet(pretrained=False, **ck["model_kwargs"]); m.load_state_dict(ck["state"]); m.input_size = ck.get("size", SIZE); ms.append(m.to(dev).eval())
     return ms
 
 
 @torch.no_grad()
 def predict_prob(models, img_rgb_u8, dev, tta=True):
     """ensemble (and flip-TTA) probability map at SIZE x SIZE, plus mean predicted size code (or nan)."""
-    x = to_tensor(cv2.resize(img_rgb_u8, (SIZE, SIZE), interpolation=cv2.INTER_LINEAR))[None].to(dev)
+    sz = models[0].input_size
+    x = to_tensor(cv2.resize(img_rgb_u8, (sz, sz), interpolation=cv2.INTER_LINEAR))[None].to(dev)
     views = [(x, ())] + ([(x.flip(-1), (-1,)), (x.flip(-2), (-2,)), (x.flip(-1, -2), (-1, -2))] if tta else [])
     xb = torch.cat([v for v, _ in views]); acc, th = 0, []
     for m in models:
@@ -52,6 +53,7 @@ def main():
     ap.add_argument("--seed", type=int, default=0); ap.add_argument("--runs", default="runs"); ap.add_argument("--out", default="eval")
     ap.add_argument("--thr", default="auto"); ap.add_argument("--no_tta", action="store_true"); ap.add_argument("--overlay_eval", action="store_true")
     ap.add_argument("--limit", type=int, default=0, help="smoke test: first N images per test set")
+    ap.add_argument("--save_pred", action="store_true", help="save the predicted binary masks (original resolution) for figures")
     a = ap.parse_args()
     dev = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     base = os.path.join(a.runs, a.protocol, a.variant, f"seed{a.seed}")
@@ -73,6 +75,9 @@ def main():
                 prob, th = predict_prob(models, im, dev, not a.no_tta)
                 pred = cv2.resize(prob, (gt.shape[1], gt.shape[0]), interpolation=cv2.INTER_LINEAR) > thr
                 r = prf(pred, gt); r["hd95"] = hd95(pred, gt)
+                if a.save_pred and not suf:
+                    os.makedirs(os.path.join(out, "preds", name), exist_ok=True)
+                    cv2.imwrite(os.path.join(out, "preds", name, it["name"] + ".png"), pred.astype(np.uint8) * 255)
                 rows.append(dict(dataset=name + suf, image=it["name"], seed=a.seed, variant=a.variant, protocol=a.protocol, thr=thr,
                                  t_hat=th, t_gt=float(np.clip((np.log10(max(gt.mean(), 1e-3)) + 3) / 3, 0, 1)), **r))
         print(name, len(items), "done", f"{time.time() - t0:.0f}s", flush=True)
