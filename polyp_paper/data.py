@@ -56,14 +56,32 @@ def ui_overlay(img, mask, rng):
     return img
 
 
+def lab_transfer(x, ref):
+    """Colour exchange (as in SANet): give image x the per-channel mean/std of a second image in LAB space. Mask unchanged."""
+    a = cv2.cvtColor(x, cv2.COLOR_RGB2LAB).astype(np.float32); b = cv2.cvtColor(ref, cv2.COLOR_RGB2LAB).astype(np.float32)
+    a = (a - a.mean((0, 1))) / (a.std((0, 1)) + 1e-6) * b.std((0, 1)) + b.mean((0, 1))
+    return cv2.cvtColor(np.clip(a, 0, 255).astype(np.uint8), cv2.COLOR_LAB2RGB)
+
+
+def zoom_out(x, m, rng, lo=0.4, hi=1.0):
+    """Shrink the whole picture to a random fraction s of its side (polyp area x s^2) and put it on a black canvas at a random place
+    (like the black border of a real endoscope frame). The training set (Kvasir) has large polyps, the test sets small ones."""
+    n = x.shape[0]; k = max(32, int(round(n * rng.uniform(lo, hi))))
+    xs = cv2.resize(x, (k, k), interpolation=cv2.INTER_AREA); ms = cv2.resize(m, (k, k), interpolation=cv2.INTER_NEAREST)
+    cx, cm = np.zeros_like(x), np.zeros_like(m); i, j = int(rng.integers(0, n - k + 1)), int(rng.integers(0, n - k + 1))
+    cx[i:i + k, j:j + k] = xs; cm[i:i + k, j:j + k] = ms
+    return cx, cm
+
+
 def area_to_t(a):
     """polyp area fraction -> size target t in [0,1]:  t = (log10(a)+3)/3 clipped (a = 0.1% -> 0, a = 100% -> 1)."""
     return float(np.clip((math.log10(max(a, 1e-3)) + 3.0) / 3.0, 0.0, 1.0))
 
 
 class PolypDS(Dataset):
-    def __init__(self, items, train=False, overlay="none", overlay_p=0.5, seed=0, size=SIZE):
+    def __init__(self, items, train=False, overlay="none", overlay_p=0.5, seed=0, size=SIZE, lab=False, zoom=False, lab_p=0.5, zoom_p=0.5):
         self.items, self.train, self.overlay, self.p, self.seed, self.size = items, train, overlay, overlay_p, seed, size
+        self.lab, self.zoom, self.lab_p, self.zoom_p = lab, zoom, lab_p, zoom_p
         self.reseed(seed)
 
     def reseed(self, seed):
@@ -80,6 +98,11 @@ class PolypDS(Dataset):
         t = area_to_t(float(mask.mean()))                               # size target from the ORIGINAL-resolution mask
         o = self.geo(image=img, mask=mask)
         x, m = o["image"], o["mask"]
+        if self.train and self.lab and self.rng.random() < self.lab_p:          # colour exchange with a random other training picture
+            j = int(self.rng.integers(0, len(self.items)))
+            x = lab_transfer(x, cv2.resize(cv2.cvtColor(cv2.imread(self.items[j]["img"]), cv2.COLOR_BGR2RGB), (x.shape[1], x.shape[0])))
+        if self.train and self.zoom and self.rng.random() < self.zoom_p:
+            x, m = zoom_out(x, m, self.rng)
         out = {"mask": torch.from_numpy(m.astype(np.float32))[None], "t": torch.tensor([t], dtype=torch.float32), "idx": i}
         if self.train and self.overlay == "pair":
             out["x"], out["x_ovl"] = to_tensor(x), to_tensor(ui_overlay(x, m, self.rng))

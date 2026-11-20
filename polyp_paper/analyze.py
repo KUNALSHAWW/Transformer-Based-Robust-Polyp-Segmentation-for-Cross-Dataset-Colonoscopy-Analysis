@@ -125,7 +125,7 @@ def main():
                 x = frame[(frame.area_frac >= lo) & (frame.area_frac < hi)]; out.append((name, len(x), x))
             return out
         groups = {s: d[d.set == s] for s in sets}
-        ext = [s for s in sets if s not in ("Kvasir120", "Kvasir100")]
+        ext = [s for s in sets if s not in ("Kvasir120", "Kvasir100", "CVC300")]   # CVC300 = 60 pictures that are byte-identical to ColonDB pictures, so it is not pooled again
         if ext: groups["all external pooled"] = d[d.set.isin(ext)]
         md.append(f"\n## Protocol {proto}: Dice by polyp size (area as share of the picture; size recovered from the size code, polyps under 0.1% count as 0.1%)\n")
         md.append("| group | size bin | n images | " + " | ".join(variants) + " |\n|---|---|---|" + "---|" * len(variants))

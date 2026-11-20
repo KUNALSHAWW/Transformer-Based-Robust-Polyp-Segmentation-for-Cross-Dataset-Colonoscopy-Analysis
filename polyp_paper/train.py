@@ -69,7 +69,7 @@ def main():
     tr, va = [pool[i] for i in tr_i], [pool[i] for i in va_i]
     run = os.path.join(a.out, a.protocol, a.variant, f"seed{a.seed}", f"fold{a.fold}"); os.makedirs(run, exist_ok=True)
     g = torch.Generator(); g.manual_seed(a.seed)
-    tl = DataLoader(PolypDS(tr, True, fl.get("overlay", "none"), seed=a.seed, size=SZ), batch_size=a.bs, shuffle=True, drop_last=len(tr) > a.bs, num_workers=a.workers,
+    tl = DataLoader(PolypDS(tr, True, fl.get("overlay", "none"), seed=a.seed, size=SZ, lab=fl.get("lab", False), zoom=fl.get("zoom", False)), batch_size=a.bs, shuffle=True, drop_last=len(tr) > a.bs, num_workers=a.workers,
                     worker_init_fn=worker_init, generator=g, pin_memory=dev.type == "cuda", persistent_workers=a.workers > 0)
     vl = DataLoader(PolypDS(va, size=SZ), batch_size=16, num_workers=a.workers)
     model = PolypNet(pretrained=not (a.no_pretrained or a.dry), **mk).to(dev)

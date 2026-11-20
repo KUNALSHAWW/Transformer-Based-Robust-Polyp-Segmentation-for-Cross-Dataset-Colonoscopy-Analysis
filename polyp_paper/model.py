@@ -135,6 +135,10 @@ VARIANTS = {   # name -> (model kwargs, loss/training flags)
     # tiny-polyp experiments: multi-scale training (0.75, 1, 1.25 x size) and a higher input size
     "base_ms": (dict(decoder="unet"), dict(ms=True)),
     "base_512": (dict(decoder="unet"), dict(size=512)),
+    # augmentations chosen from the research (colour exchange: SANet; zoom-out: size mismatch between Kvasir and the small-polyp test sets)
+    "base_lab": (dict(decoder="unet"), dict(lab=True)),
+    "base_zoom": (dict(decoder="unet"), dict(zoom=True)),
+    "base_lab_zoom": (dict(decoder="unet"), dict(lab=True, zoom=True)),
     # distillation: small student learns from the base (MiT-B3) model of the same fold
     "base_b0_kd": (dict(decoder="unet", encoder="mit_b0"), dict(kd="base")),
     "base_b1_kd": (dict(decoder="unet", encoder="mit_b1"), dict(kd="base")),

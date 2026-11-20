@@ -69,4 +69,14 @@ for p, want in (("A", (880, 5)), ("B", (1450, 5)), ("Bclean", (1458, 5))):
     pool, tests = get_protocol(a.data_root, p); folds = make_folds(pool, p)
     assert (len(pool), len(folds)) == want and all(len(set(t) & set(v)) == 0 for t, v in folds), p
 print("splits OK")
+# 5) new augmentations: zoom-out keeps image and mask aligned and shrinks the polyp; colour exchange keeps shape/type; PraNet-metric helper sane
+from data import zoom_out, lab_transfer
+from evaluate import pranet_dice_iou
+rng = np.random.default_rng(0); xx = (rng.random((96, 96, 3)) * 255).astype(np.uint8); mm = np.zeros((96, 96), np.uint8); mm[30:60, 30:60] = 1
+for _ in range(20):
+    zx, zm = zoom_out(xx, mm, rng)
+    assert zx.shape == xx.shape and zm.shape == mm.shape and 0 < zm.sum() <= mm.sum() and zm.sum() >= (0.4 ** 2) * mm.sum() * 0.7
+ly = lab_transfer(xx, xx[::-1].copy()); assert ly.shape == xx.shape and ly.dtype == np.uint8
+g_ = mm.astype(bool); pd_, _ = pranet_dice_iou(g_.astype(np.float32), g_); assert pd_ > 0.99, pd_
+print("zoom-out / colour exchange / PraNet-metric helper OK")
 print("SELF-CHECK PASSED")
