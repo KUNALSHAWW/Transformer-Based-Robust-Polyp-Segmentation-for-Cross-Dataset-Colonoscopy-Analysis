@@ -79,4 +79,13 @@ for _ in range(20):
 ly = lab_transfer(xx, xx[::-1].copy()); assert ly.shape == xx.shape and ly.dtype == np.uint8
 g_ = mm.astype(bool); pd_, _ = pranet_dice_iou(g_.astype(np.float32), g_); assert pd_ > 0.99, pd_
 print("zoom-out / colour exchange / PraNet-metric helper OK")
+from data import zoom_match
+for _ in range(10):
+    zx, zm = zoom_match(xx, mm, rng); assert zx.shape == xx.shape and zm.shape == mm.shape and 0 < zm.sum() <= mm.sum()
+lg_ = torch.randn(4, 1, 16, 16); yy_ = (torch.rand(4, 1, 16, 16) > .7).float()
+assert torch.isfinite(SegLoss(per_image_dice=True)(lg_, yy_)) and torch.isfinite(SegLoss()(lg_, yy_))
+from model import VARIANTS
+assert all(k in VARIANTS for k in ("base_zoom_black", "base_zoom_match", "base_pid"))
+import postproc; postproc._selftest()
+print("new variants / per-image Dice / post-processing helpers OK")
 print("SELF-CHECK PASSED")

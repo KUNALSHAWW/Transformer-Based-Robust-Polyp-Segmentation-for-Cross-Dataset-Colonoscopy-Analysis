@@ -39,12 +39,17 @@ def beta_from_t(t_hat):
 
 
 class SegLoss(nn.Module):
-    def __init__(self, size_tversky=False, w_bce=1.0, w_lov=0.5):
+    def __init__(self, size_tversky=False, w_bce=1.0, w_lov=0.5, per_image_dice=False):
         super().__init__()
-        self.size_tversky, self.w_bce, self.w_lov = size_tversky, w_bce, w_lov
+        self.size_tversky, self.w_bce, self.w_lov, self.per_image_dice = size_tversky, w_bce, w_lov, per_image_dice
         self.dice = smp.losses.DiceLoss(mode="binary", from_logits=True)
         self.bce = nn.BCEWithLogitsLoss()
 
     def forward(self, logits, y, t_hat=None):
-        region = tversky_per_image(logits, y, beta_from_t(t_hat.detach().squeeze(1))) if (self.size_tversky and t_hat is not None) else self.dice(logits, y)
+        if self.size_tversky and t_hat is not None:
+            region = tversky_per_image(logits, y, beta_from_t(t_hat.detach().squeeze(1)))
+        elif self.per_image_dice:      # Tversky with alpha = beta = 0.5 is exactly the Dice loss, computed for every picture separately
+            region = tversky_per_image(logits, y, torch.full((logits.shape[0],), 0.5, device=logits.device))
+        else:                          # default (all earlier runs): smp Dice loss pooled over the whole batch
+            region = self.dice(logits, y)
         return region + self.w_bce * self.bce(logits, y) + self.w_lov * lovasz_hinge(logits, y)

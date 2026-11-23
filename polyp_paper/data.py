@@ -7,6 +7,7 @@ import math
 import albumentations as A
 import cv2, numpy as np, torch
 from torch.utils.data import Dataset
+from postproc import paste_shrunk, scale_for_area
 
 MEAN, STD = np.array([0.485, 0.456, 0.406], np.float32), np.array([0.229, 0.224, 0.225], np.float32)
 SIZE = 384
@@ -63,14 +64,17 @@ def lab_transfer(x, ref):
     return cv2.cvtColor(np.clip(a, 0, 255).astype(np.uint8), cv2.COLOR_LAB2RGB)
 
 
-def zoom_out(x, m, rng, lo=0.4, hi=1.0):
-    """Shrink the whole picture to a random fraction s of its side (polyp area x s^2) and put it on a black canvas at a random place
-    (like the black border of a real endoscope frame). The training set (Kvasir) has large polyps, the test sets small ones."""
-    n = x.shape[0]; k = max(32, int(round(n * rng.uniform(lo, hi))))
-    xs = cv2.resize(x, (k, k), interpolation=cv2.INTER_AREA); ms = cv2.resize(m, (k, k), interpolation=cv2.INTER_NEAREST)
-    cx, cm = np.zeros_like(x), np.zeros_like(m); i, j = int(rng.integers(0, n - k + 1)), int(rng.integers(0, n - k + 1))
-    cx[i:i + k, j:j + k] = xs; cm[i:i + k, j:j + k] = ms
-    return cx, cm
+def zoom_out(x, m, rng, lo=0.4, hi=1.0, bg="natural"):
+    """Shrink the whole picture to a random fraction s of its side (polyp area x s^2) and put it at a random place on a canvas.
+    bg='natural' (default): canvas = blurred copy of the same picture (no artificial black frame); bg='black': the first version.
+    The training set (Kvasir) has large polyps, the test sets small ones."""
+    return paste_shrunk(x, m, float(rng.uniform(lo, hi)), rng, bg)
+
+
+def zoom_match(x, m, rng, bg="natural"):
+    """Scale-matched shrinking: the shrink factor depends on the polyp itself so that the area share of the polyp in the training
+    pictures follows a log-uniform target between 0.3% and 12% (large polyps shrink a lot, small ones are left alone)."""
+    return paste_shrunk(x, m, scale_for_area(float(m.mean()), rng=rng), rng, bg)
 
 
 def area_to_t(a):
@@ -79,9 +83,9 @@ def area_to_t(a):
 
 
 class PolypDS(Dataset):
-    def __init__(self, items, train=False, overlay="none", overlay_p=0.5, seed=0, size=SIZE, lab=False, zoom=False, lab_p=0.5, zoom_p=0.5):
+    def __init__(self, items, train=False, overlay="none", overlay_p=0.5, seed=0, size=SIZE, lab=False, zoom=False, lab_p=0.5, zoom_p=0.5, zoom_bg="natural"):
         self.items, self.train, self.overlay, self.p, self.seed, self.size = items, train, overlay, overlay_p, seed, size
-        self.lab, self.zoom, self.lab_p, self.zoom_p = lab, zoom, lab_p, zoom_p
+        self.lab, self.zoom, self.lab_p, self.zoom_p, self.zoom_bg = lab, zoom, lab_p, zoom_p, zoom_bg
         self.reseed(seed)
 
     def reseed(self, seed):
@@ -102,7 +106,7 @@ class PolypDS(Dataset):
             j = int(self.rng.integers(0, len(self.items)))
             x = lab_transfer(x, cv2.resize(cv2.cvtColor(cv2.imread(self.items[j]["img"]), cv2.COLOR_BGR2RGB), (x.shape[1], x.shape[0])))
         if self.train and self.zoom and self.rng.random() < self.zoom_p:
-            x, m = zoom_out(x, m, self.rng)
+            x, m = (zoom_match(x, m, self.rng, self.zoom_bg) if self.zoom == "match" else zoom_out(x, m, self.rng, bg=self.zoom_bg))
         out = {"mask": torch.from_numpy(m.astype(np.float32))[None], "t": torch.tensor([t], dtype=torch.float32), "idx": i}
         if self.train and self.overlay == "pair":
             out["x"], out["x_ovl"] = to_tensor(x), to_tensor(ui_overlay(x, m, self.rng))

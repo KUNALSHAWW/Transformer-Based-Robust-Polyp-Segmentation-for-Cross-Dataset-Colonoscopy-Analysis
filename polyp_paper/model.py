@@ -137,8 +137,11 @@ VARIANTS = {   # name -> (model kwargs, loss/training flags)
     "base_512": (dict(decoder="unet"), dict(size=512)),
     # augmentations chosen from the research (colour exchange: SANet; zoom-out: size mismatch between Kvasir and the small-polyp test sets)
     "base_lab": (dict(decoder="unet"), dict(lab=True)),
-    "base_zoom": (dict(decoder="unet"), dict(zoom=True)),
+    "base_zoom": (dict(decoder="unet"), dict(zoom=True)),                          # zoom-out on a natural (blurred-picture) background
+    "base_zoom_black": (dict(decoder="unet"), dict(zoom=True, zoom_bg="black")),    # control: the first version with a black canvas
+    "base_zoom_match": (dict(decoder="unet"), dict(zoom="match")),                  # scale-matched: shrink factor chosen from the polyp size
     "base_lab_zoom": (dict(decoder="unet"), dict(lab=True, zoom=True)),
+    "base_pid": (dict(decoder="unet"), dict(pid_dice=True)),                        # per-image Dice instead of the batch-pooled Dice
     # distillation: small student learns from the base (MiT-B3) model of the same fold
     "base_b0_kd": (dict(decoder="unet", encoder="mit_b0"), dict(kd="base")),
     "base_b1_kd": (dict(decoder="unet", encoder="mit_b1"), dict(kd="base")),

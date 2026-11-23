@@ -69,13 +69,13 @@ def main():
     tr, va = [pool[i] for i in tr_i], [pool[i] for i in va_i]
     run = os.path.join(a.out, a.protocol, a.variant, f"seed{a.seed}", f"fold{a.fold}"); os.makedirs(run, exist_ok=True)
     g = torch.Generator(); g.manual_seed(a.seed)
-    tl = DataLoader(PolypDS(tr, True, fl.get("overlay", "none"), seed=a.seed, size=SZ, lab=fl.get("lab", False), zoom=fl.get("zoom", False)), batch_size=a.bs, shuffle=True, drop_last=len(tr) > a.bs, num_workers=a.workers,
+    tl = DataLoader(PolypDS(tr, True, fl.get("overlay", "none"), seed=a.seed, size=SZ, lab=fl.get("lab", False), zoom=fl.get("zoom", False), zoom_bg=fl.get("zoom_bg", "natural")), batch_size=a.bs, shuffle=True, drop_last=len(tr) > a.bs, num_workers=a.workers,
                     worker_init_fn=worker_init, generator=g, pin_memory=dev.type == "cuda", persistent_workers=a.workers > 0)
     vl = DataLoader(PolypDS(va, size=SZ), batch_size=16, num_workers=a.workers)
     model = PolypNet(pretrained=not (a.no_pretrained or a.dry), **mk).to(dev)
     opt = torch.optim.AdamW(param_groups(model, a.lr_enc, a.lr_dec), weight_decay=1e-5)
     sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=a.epochs, eta_min=1e-7)
-    scaler = torch.amp.GradScaler(enabled=amp); ema = EMA(model); crit = SegLoss(size_tversky=fl.get("size_tversky", False))
+    scaler = torch.amp.GradScaler(enabled=amp); ema = EMA(model); crit = SegLoss(size_tversky=fl.get("size_tversky", False), per_image_dice=fl.get("pid_dice", False))
     teacher = None
     if fl.get("kd"):                       # distillation: teacher = the SAME inner fold of another variant (it never saw this fold's validation images)
         tdir = os.path.join(a.out, a.protocol, fl["kd"], f"seed{a.seed}", f"fold{a.fold}"); waited = 0

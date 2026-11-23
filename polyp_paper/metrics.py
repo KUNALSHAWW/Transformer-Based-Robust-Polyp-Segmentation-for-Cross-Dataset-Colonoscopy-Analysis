@@ -48,6 +48,28 @@ def hd95(pred, gt):
     return float(np.percentile(np.concatenate([d_to_g, d_to_p]), 95))
 
 
+def hd95_diag(pred, gt):
+    """HD95 divided by the picture diagonal (so pictures of different size can be averaged). FAILURE-PENALISED: a polyp is present but nothing was
+    predicted -> 1.0 (worst case). NaN only if the ground truth is empty. Report it NEXT TO the ordinary HD95, never instead of it."""
+    pred, gt = np.asarray(pred, bool), np.asarray(gt, bool)
+    if not gt.any():
+        return float("nan")
+    if not pred.any():
+        return 1.0
+    return hd95(pred, gt) / float(np.hypot(*gt.shape))
+
+
+def n_components(mask):
+    return int(ndimage.label(np.asarray(mask, bool), structure=np.ones((3, 3), int))[1])
+
+
+def failure_columns(pred, gt):
+    """per-image failure type: empty = nothing predicted; no_overlap = something predicted but not touching the polyp (wrong place);
+    n_pred_comp = number of separate predicted regions; hd95_diag = failure-penalised, diagonal-normalised HD95."""
+    pred, gt = np.asarray(pred, bool), np.asarray(gt, bool)
+    return dict(empty=float(not pred.any()), no_overlap=float(pred.any() and not (pred & gt).any()), n_pred_comp=float(n_components(pred)), hd95_diag=hd95_diag(pred, gt))
+
+
 def summarize(values):
     v = np.asarray(values, float)
     return dict(mean=float(np.nanmean(v)), std=float(np.nanstd(v, ddof=1)),
@@ -112,6 +134,10 @@ def _selfcheck():
     assert paired_compare(x + rng.normal(0, 0.005, 300), x)["wilcoxon_p"] > 0.001
     # 6) JPEG-style gray mask is binarized, not rescaled
     assert binarize_gt(np.array([[0, 3, 126, 128, 255]])).tolist() == [[False, False, False, True, True]]
+    # 7) failure-aware columns: empty prediction -> penalised 1.0; wrong place -> no_overlap; two blobs counted
+    assert hd95_diag(np.zeros_like(sq), sq) == 1.0 and np.isnan(hd95_diag(sq, np.zeros_like(sq))) and hd95_diag(sq, sq) == 0.0
+    two = sq.copy(); two[2:5, 2:5] = True; fc = failure_columns(two, sq); assert fc["n_pred_comp"] == 2 and fc["no_overlap"] == 0 and fc["empty"] == 0
+    away = np.zeros_like(sq); away[2:5, 2:5] = True; assert failure_columns(away, sq)["no_overlap"] == 1.0
     print("metrics.py self-check OK")
 
 

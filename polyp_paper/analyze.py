@@ -12,18 +12,23 @@ import numpy as np, pandas as pd
 from metrics import bootstrap_ci, paired_compare
 
 VARIANT_ORDER = ["base", "roy_plain", "roy", "roy_size", "roy_overlay", "roy_full",
-                 "base_ms", "base_512", "base_b2", "base_b1", "base_b0", "base_b2_kd", "base_b1_kd", "base_b0_kd", "roy_b1", "roy_b1_kd", "roy_b0"]
+                 "base_ms", "base_512", "base_b2", "base_b1", "base_b0", "base_b2_kd", "base_b1_kd", "base_b0_kd", "roy_b1", "roy_b1_kd", "roy_b0",
+                 "base_lab", "base_zoom", "base_zoom_black", "base_zoom_match", "base_lab_zoom", "base_pid"]
 COL = {"base": "#4c72b0", "roy_plain": "#8c8c8c", "roy": "#dd8452", "roy_size": "#55a868", "roy_overlay": "#8172b3", "roy_full": "#c44e52",
        "base_ms": "#937860", "base_512": "#da8bc3", "base_b2": "#64b5cd", "base_b1": "#ccb974", "base_b0": "#8c613c",
-       "base_b2_kd": "#1f77b4", "base_b1_kd": "#bcbd22", "base_b0_kd": "#7f4a1c", "roy_b1": "#e377c2", "roy_b1_kd": "#17becf", "roy_b0": "#aec7e8"}
+       "base_b2_kd": "#1f77b4", "base_b1_kd": "#bcbd22", "base_b0_kd": "#7f4a1c", "roy_b1": "#e377c2", "roy_b1_kd": "#17becf", "roy_b0": "#aec7e8",
+       "base_lab": "#2ca02c", "base_zoom": "#d62728", "base_zoom_black": "#ff9896", "base_zoom_match": "#9467bd", "base_lab_zoom": "#8c564b", "base_pid": "#7f7f7f"}
 NICE = {"base": "base (original model)", "roy_plain": "roy_plain", "roy": "roy (guide-style decoder)", "roy_size": "roy + size idea",
         "roy_overlay": "roy + sticker idea", "roy_full": "roy + both ideas",
         "base_ms": "base + multi-scale training", "base_512": "base at 512 px", "base_b2": "small encoder B2", "base_b1": "small encoder B1", "base_b0": "tiny encoder B0",
         "base_b2_kd": "B2 taught by base", "base_b1_kd": "B1 taught by base", "base_b0_kd": "B0 taught by base",
-        "roy_b1": "B1 + guide decoder", "roy_b1_kd": "B1 + guide decoder, taught", "roy_b0": "B0 + guide decoder"}
+        "roy_b1": "B1 + guide decoder", "roy_b1_kd": "B1 + guide decoder, taught", "roy_b0": "B0 + guide decoder",
+        "base_lab": "base + colour exchange", "base_zoom": "base + zoom-out (natural background)", "base_zoom_black": "base + zoom-out (black canvas)", "base_zoom_match": "base + scale-matched zoom-out",
+        "base_lab_zoom": "base + colour exchange + zoom-out", "base_pid": "base + per-image Dice"}
 PARAMS_M = {"base": 47.35, "roy_plain": 44.34, "roy": 45.46, "roy_size": 45.53, "roy_overlay": 45.46, "roy_full": 45.53,   # measured in selfcheck.py
             "base_ms": 47.35, "base_512": 47.35, "base_b2": 27.48, "base_b1": 16.43, "base_b0": 5.55, "base_b2_kd": 27.48, "base_b1_kd": 16.43, "base_b0_kd": 5.55,
-            "roy_b1": 14.54, "roy_b1_kd": 14.54, "roy_b0": 4.15}
+            "roy_b1": 14.54, "roy_b1_kd": 14.54, "roy_b0": 4.15,
+            "base_lab": 47.35, "base_zoom": 47.35, "base_zoom_black": 47.35, "base_zoom_match": 47.35, "base_lab_zoom": 47.35, "base_pid": 47.35}
 # published mDice under the standard (PraNet) protocol, copied from each method's own paper (see evidence notes)
 PUBLISHED = {"PraNet (2020)": [.898, .899, .709, .628, .871], "SANet (2021)": [.904, .916, .753, .750, .888], "Polyp-PVT (2023)": [.917, .937, .808, .787, .900],
              "Polyper (2024)": [.9482, .9445, .8372, .8651, .9243], "SAM-MaGuP (2025)": [.947, .953, .859, .854, .927]}
@@ -46,7 +51,7 @@ def load(bundle):
     df["area_frac"] = 10 ** (3 * df["t_gt"] - 3)                     # lesion area fraction recovered from the size code (floor 0.1%)
     df["overlay"] = df["dataset"].str.endswith("+overlay"); df["set"] = df["dataset"].str.replace("+overlay", "", regex=False)
     keys = ["protocol", "variant", "set", "overlay", "image"]
-    num = METRICS + ["t_hat", "t_gt", "area_frac", "gt_area"]
+    num = METRICS + ["t_hat", "t_gt", "area_frac", "gt_area"] + [c for c in ("hd95_diag", "empty", "no_overlap", "n_pred_comp", "pred_area") if c in df.columns]
     return df.groupby(keys, as_index=False)[num].mean()
 
 
@@ -74,12 +79,13 @@ def main():
             for s in sets:
                 x = d[(d.variant == v) & (d.set == s)]; lo, hi = bootstrap_ci(x.dice.values)
                 rows.append(dict(protocol=proto, version=v, test_set=s, n=len(x), dice=x.dice.mean(), dice_ci=f"{lo:.3f}-{hi:.3f}", iou=x.iou.mean(), precision=x.precision.mean(),
-                                 recall=x.recall.mean(), f2=x.f2.mean(), hd95_mean=x.hd95.mean(), hd95_median=x.hd95.median()))
+                                 recall=x.recall.mean(), f2=x.f2.mean(), hd95_mean=x.hd95.mean(), hd95_median=x.hd95.median(),
+                                 empty_share=x["empty"].mean() if "empty" in x else np.nan, hd95_diag_pct=100 * x.hd95_diag.mean() if "hd95_diag" in x else np.nan))
         t1 = pd.DataFrame(rows); t1.to_csv(os.path.join(a.out, f"table_results_{proto}.csv"), index=False)
         md.append(f"\n## Protocol {proto}: results per test set (mean over images; Dice with 95% bootstrap CI over images)\n")
         md.append("| version | test set | n | Dice [95% CI] | IoU | Precision | Recall | F2 | HD95 mean / median (px) |\n|---|---|---|---|---|---|---|---|---|")
         for r in rows:
-            md.append(f"| {r['version']} | {r['test_set']} | {r['n']} | {r['dice']:.4f} [{r['dice_ci']}] | {r['iou']:.4f} | {r['precision']:.4f} | {r['recall']:.4f} | {r['f2']:.4f} | {r['hd95_mean']:.1f} / {r['hd95_median']:.1f} |")
+            md.append(f"| {r['version']} | {r['test_set']} | {r['n']} | {r['dice']:.4f} [{r['dice_ci']}] | {r['iou']:.4f} | {r['precision']:.4f} | {r['recall']:.4f} | {r['f2']:.4f} | {r['hd95_mean']:.1f} / {r['hd95_median']:.1f} | {100 * r['empty_share']:.1f} | {r['hd95_diag_pct']:.2f} |")
         # ---- Table 2: paired comparison with base ----
         if "base" in variants and len(variants) > 1:
             prow = []
@@ -94,8 +100,8 @@ def main():
                             cl = "%.4f to %.4f" % cluster_ci((x.loc[common, m].values - b.loc[common, m].values), np.array([seq[int(i)] for i in common]))
                         prow.append(dict(version=v, test_set=s, metric=m, mean_diff=pc["mean_diff"], ci_lo=pc["ci95"][0], ci_hi=pc["ci95"][1], p_raw=pc["wilcoxon_p"], cluster_ci=cl, n=pc["n"]))
             t2 = pd.DataFrame(prow); t2["p_holm"] = np.nan
-            for m in ("dice", "hd95"):
-                msk = t2.metric == m; t2.loc[msk, "p_holm"] = holm(t2.loc[msk, "p_raw"].values)
+            for m in ("dice", "hd95"):          # CVC-300 (60 pictures, all inside ColonDB) is shown but is NOT part of the Holm family (p_holm stays empty for it)
+                msk = (t2.metric == m) & (t2.test_set != "CVC300"); t2.loc[msk, "p_holm"] = holm(t2.loc[msk, "p_raw"].values)
             t2.to_csv(os.path.join(a.out, f"table_paired_vs_base_{proto}.csv"), index=False)
             md.append(f"\n## Protocol {proto}: difference to `base` on the same images (positive Dice difference = better; for HD95 negative = better)\n")
             md.append("| version | test set | metric | mean difference [95% CI] | p (Wilcoxon) | p (Holm) | extra CI over video sequences (ClinicDB only) |\n|---|---|---|---|---|---|---|")

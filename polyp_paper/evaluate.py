@@ -8,7 +8,7 @@ import cv2, numpy as np, torch
 from splits import get_protocol
 from model import PolypNet
 from data import SIZE, to_tensor, ui_overlay
-from metrics import prf, hd95, binarize_gt
+from metrics import prf, hd95, binarize_gt, failure_columns
 
 
 def load_models(run_dirs, dev):
@@ -40,6 +40,23 @@ def predict_prob(models, img_rgb_u8, dev, tta=True, scales=(1.0,)):
             if t is not None and s_ == scales[0]:
                 th.append(float(t[0]))
     return (acc / cnt)[0].cpu().numpy(), (float(np.mean(th)) if th else float("nan"))
+
+
+@torch.no_grad()
+def predict_views(models, img_rgb_u8, dev):
+    """per-view probability maps [n_models, 4 flips, S, S] on the grid of the first model (flips undone). The usual map of predict_prob (scale 1) is their mean."""
+    out_sz = models[0].input_size; res = []
+    for m in models:
+        sz = m.input_size
+        x = to_tensor(cv2.resize(img_rgb_u8, (sz, sz), interpolation=cv2.INTER_LINEAR))[None].to(dev)
+        views = [(x, ()), (x.flip(-1), (-1,)), (x.flip(-2), (-2,)), (x.flip(-1, -2), (-1, -2))]
+        with torch.autocast(device_type=dev.type, enabled=dev.type == "cuda"):
+            lg, _ = m(torch.cat([v for v, _ in views]))
+        p = torch.sigmoid(lg.float()); p = torch.stack([pi.flip(dims) if dims else pi for pi, (_, dims) in zip(p, views)])
+        if sz != out_sz:
+            p = torch.nn.functional.interpolate(p, size=(out_sz, out_sz), mode="bilinear", align_corners=False)
+        res.append(p[:, 0])
+    return torch.stack(res).cpu().numpy()
 
 
 def pranet_dice_iou(prob, gt):
@@ -100,7 +117,7 @@ def main():
             for suf, im in variants:
                 prob, th = predict_prob(models, im, dev, not a.no_tta, scales)
                 pf = cv2.resize(prob, (gt.shape[1], gt.shape[0]), interpolation=cv2.INTER_LINEAR); pred = pf > thr
-                r = prf(pred, gt); r["hd95"] = hd95(pred, gt)
+                r = prf(pred, gt); r["hd95"] = hd95(pred, gt); r.update(failure_columns(pred, gt))
                 if a.pranet_metric:
                     r["pn_dice"], r["pn_iou"] = pranet_dice_iou(pf, gt)
                 if a.fallback > 0:
@@ -118,7 +135,7 @@ def main():
     summ = {}
     for d in sorted({r["dataset"] for r in rows}):
         rr = [r for r in rows if r["dataset"] == d]
-        summ[d] = {m: float(np.nanmean([r[m] for r in rr])) for m in ("dice", "iou", "precision", "recall", "f2", "hd95", "pn_dice", "pn_iou", "fb_dice", "fb_hd95", "was_empty") if m in rr[0]} | {"n": len(rr)}
+        summ[d] = {m: float(np.nanmean([r[m] for r in rr])) for m in ("dice", "iou", "precision", "recall", "f2", "hd95", "hd95_diag", "empty", "no_overlap", "n_pred_comp", "pn_dice", "pn_iou", "fb_dice", "fb_hd95", "was_empty") if m in rr[0]} | {"n": len(rr)}
     json.dump(dict(thr=thr, oof_sweep=sweep, n_models=len(models), tta=not a.no_tta, summary=summ, seconds=time.time() - t0), open(os.path.join(out, "summary.json"), "w"), indent=1)
     print(json.dumps(summ, indent=1))
 
