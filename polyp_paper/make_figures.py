@@ -91,7 +91,7 @@ def fig_sizeswap(X, E, out):
     for s, mode in (("Kvasir120", "shrink"), ("ColonDB", "zoom"), ("ETIS", "zoom")):
         x = d[(d.dataset == s) & (d["mode"] == mode)]
         if x.empty: continue
-        if mode == "zoom": x = x[x.gt_cut < 0.1]
+        if mode == "zoom": x = x[~x.image.isin(set(d[(d.dataset == s) & (d.gt_cut >= 0.1)].image))]   # same pictures at every zoom (paired): drop pictures whose polyp is cut by the crop at ANY zoom
         g = x.groupby("factor").agg(n=("dice", "size"), dice=("dice", "mean"), empty=("empty", "mean"), area=("rel_area", "median"))
         for f, r in g.iterrows(): kn(f"| {s} | {mode} | {f} | {int(r.n)} | {r.dice:.3f} | {r['empty']:.2f} | {100 * r.area:.2f} |")
         ax[0].plot(g.index, g.dice, "o-", color=SC[s], label=f"{s} ({'shrunk by s' if mode == 'shrink' else 'oracle zoom z'})")
@@ -105,7 +105,7 @@ def fig_sizeswap(X, E, out):
         for s in ("Kvasir120", "ColonDB", "ETIS"): curve(e[e.set == s], color=SC[s], lw=1, ls="--", label=f"{s} as it is")
     for s, mode in (("Kvasir120", "shrink"), ("ColonDB", "zoom"), ("ETIS", "zoom")):
         x = d[(d.dataset == s) & (d["mode"] == mode)]
-        if mode == "zoom": x = x[x.gt_cut < 0.1]
+        if mode == "zoom": x = x[~x.image.isin(set(d[(d.dataset == s) & (d.gt_cut >= 0.1)].image))]   # same pictures at every zoom (paired): drop pictures whose polyp is cut by the crop at ANY zoom
         if len(x): curve(x, color=SC[s], lw=2.2, label=f"{s} after the size change")
     ax[1].set_xscale("log"); ax[1].set_xlabel("polyp area as share of the picture"); ax[1].set_ylabel("mean Dice"); ax[1].grid(alpha=.3); ax[1].legend(fontsize=7)
     ax[1].set_title("If the curves overlap, size explains the gap; if not, the data set does", fontsize=10)
@@ -232,10 +232,15 @@ def fig_metric(bundle, out):
 # ---------------------------------------------------------------- 9 PolypGen
 @figure
 def fig_polypgen(X, out):
-    d = X["polypgen"]
-    if d is None: return False
+    d0 = X["polypgen"]
+    if d0 is None: return False
+    for pr in sorted(d0.protocol.unique()):          # never pool models trained under different protocols
+        _polypgen_one(d0[d0.protocol == pr].copy(), out, pr)
+
+
+def _polypgen_one(d, out, pr):
     cfgs = [c for c in ("raw", "consensus", "peak_gate", "zoom", "zoom+consensus") if c in set(d.config)]
-    fig, ax = plt.subplots(1, 3, figsize=(16, 4.2)); kn("## 9. PolypGen (zero-shot, research-only data; cite the three PolypGen papers)")
+    fig, ax = plt.subplots(1, 3, figsize=(16, 4.2)); kn(f"## 9. PolypGen, model trained under Protocol {pr} (zero-shot, research-only data; cite the three PolypGen papers)")
     s = d[d.kind == "single"]; cs = sorted(s.dataset.unique()); w = .8 / len(cfgs)
     kn("| centre (single frames) | n | " + " | ".join(f"Dice {c}" for c in cfgs) + " |"); kn("|---|---|" + "---|" * len(cfgs))
     for i, c in enumerate(cfgs):
@@ -252,7 +257,7 @@ def fig_polypgen(X, out):
         kn(f"| {nm} | {int((z.config == cfgs[0]).sum())} | " + " | ".join(f"{100 * z[z.config == c].pred_any.mean():.1f}% ({z[z.config == c].pred_area.mean():.0f} px)" for c in cfgs) + " |")
         ax[2].bar(np.arange(len(cfgs)) + j * .4, [100 * z[z.config == c].pred_any.mean() for c in cfgs], .4, label=nm)
     ax[2].set_xticks(np.arange(len(cfgs)) + .2); ax[2].set_xticklabels(cfgs, fontsize=7); ax[2].set_ylabel("% of frames with a false alarm"); ax[2].legend(fontsize=7); ax[2].set_title("Frames without a polyp: false alarms", fontsize=10); ax[2].grid(alpha=.3, axis="y")
-    plt.tight_layout(); plt.savefig(os.path.join(out, "fig_9_polypgen.png"), dpi=150); plt.close(); kn()
+    plt.tight_layout(); plt.savefig(os.path.join(out, f"fig_9_polypgen_{pr}.png"), dpi=150); plt.close(); kn()
 
 
 # ---------------------------------------------------------------- 10 qualitative (public data sets only; never PolypGen)
