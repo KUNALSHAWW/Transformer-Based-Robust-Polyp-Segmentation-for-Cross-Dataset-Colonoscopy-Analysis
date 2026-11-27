@@ -209,6 +209,17 @@ def fig_new_variants(E, out):
         kn(f"| {v} | {t.mean():.3f} ({len(t)}) | {dt.mean():+.3f} [{lt:+.3f},{ht:+.3f}] | {a.mean():.4f} | {da.mean():+.4f} [{la:+.4f},{ha:+.4f}] | {k_:.4f} | {c_:.4f} | {ok} |")
         ax[0].errorbar(i, dt.mean() if v != "base" else 0, yerr=None if v == "base" else [[dt.mean() - lt], [ht - dt.mean()]], fmt="o", capsize=3, color="#c44e52"); ax[1].errorbar(i, da.mean() if v != "base" else 0, yerr=None if v == "base" else [[da.mean() - la], [ha - da.mean()]], fmt="o", capsize=3, color="#4c72b0")
         for j, s in enumerate(SETS): ax[2].bar(j + i * .8 / len(vs), d[(d.variant == v) & (d.set == s)].dice.mean(), .8 / len(vs), color=plt.cm.tab20(i), label=v if j == 0 else None)
+    # same-seed check: the table above compares one-seed versions with the seed-average of base; the bootstrap CIs only reflect picture sampling, NOT training-seed variance
+    s0 = E[(E.protocol == "A") & (E.seed == 0) & E.set.isin(["ColonDB", "ETIS"])]
+    if "base" in set(s0.variant):
+        kn("Same-seed check (seed 0 of each version vs seed 0 of base, ColonDB+ETIS pooled). CIs = picture sampling only; training-seed spread of base is in section 6, a gain that is not clearly larger than that spread needs more seeds.")
+        kn("| version | d Dice ColonDB+ETIS [95% CI] | d ColonDB | d ETIS |"); kn("|---|---|---|---|")
+        b0 = s0[s0.variant == "base"].set_index(["set", "image"]).dice
+        for v in new:
+            a0 = s0[s0.variant == v].set_index(["set", "image"]).dice; dd = (a0 - b0).dropna()
+            if len(dd) < 3: continue
+            l_, h_ = ci(dd); kn(f"| {v} | {dd.mean():+.4f} [{l_:+.4f},{h_:+.4f}] | {dd.xs('ColonDB').mean():+.4f} | {dd.xs('ETIS').mean():+.4f} |")
+        kn()
     for a_, ttl, thr in ((ax[0], "Dice change on <1% polyps (rule: >= +0.04)", .04), (ax[1], "Dice change ColonDB+ETIS (rule: >= -0.005)", -.005)):
         a_.axhline(0, color="k", lw=.8); a_.axhline(thr, color="g", ls="--", lw=.8); a_.set_xticks(range(len(vs))); a_.set_xticklabels(vs, rotation=40, fontsize=7); a_.set_title(ttl, fontsize=9); a_.grid(alpha=.3)
     ax[2].set_xticks(np.arange(len(SETS)) + .35); ax[2].set_xticklabels(SETS, fontsize=7); ax[2].set_ylim(.7, .95); ax[2].legend(fontsize=5, ncol=2); ax[2].set_title("Mean Dice per set", fontsize=9); ax[2].grid(alpha=.3, axis="y")
